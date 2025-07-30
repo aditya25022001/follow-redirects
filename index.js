@@ -355,10 +355,6 @@ RedirectableRequest.prototype._processResponse = function (response) {
       removeMatchingHeaders(/^content-/i, this._options.headers);
     }
 
-    // Drop the Host header, as the redirect might lead to a different host
-    var previousHostName = removeMatchingHeaders(/^host$/i, this._options.headers) ||
-      url.parse(this._currentUrl).hostname;
-
     // Create the redirected request
     var redirectUrl = url.resolve(this._currentUrl, location);
     debug("redirecting to", redirectUrl);
@@ -366,9 +362,16 @@ RedirectableRequest.prototype._processResponse = function (response) {
     var redirectUrlParts = url.parse(redirectUrl);
     Object.assign(this._options, redirectUrlParts);
 
-    // Drop the Authorization header if redirecting to another host
-    if (redirectUrlParts.hostname !== previousHostName) {
-      removeMatchingHeaders(/^authorization$/i, this._options.headers);
+    var currentUrlParts = url.parse(this._currentUrl);
+
+    var currentHost = removeMatchingHeaders(/^host$/i, this._options.headers) || currentUrlParts.host;
+    // Drop confidential headers when redirecting to a less secure protocol
+    // or to a different domain that is not a superdomain
+    if (
+      (redirectUrlParts.protocol !== currentUrlParts.protocol && redirectUrlParts.protocol !== "https:") ||
+      (redirectUrlParts.host !== currentHost && !isSubdomain(redirectUrlParts.host, currentHost))
+    ) {
+      removeMatchingHeaders(/^(?:(?:proxy-)?authorization|cookie)$/i, this._options.headers);
     }
 
     // Evaluate the beforeRedirect callback
@@ -506,6 +509,16 @@ function removeMatchingHeaders(regex, headers) {
     }
   }
   return lastValue;
+}
+
+function isString(value) {
+  return typeof value === "string" || value instanceof String;
+}
+
+function isSubdomain(subdomain, domain) {
+  assert(isString(subdomain) && isString(domain));
+  var dot = subdomain.length - domain.length - 1;
+  return dot > 0 && subdomain[dot] === "." && subdomain.endsWith(domain);
 }
 
 function createErrorType(code, defaultMessage) {
