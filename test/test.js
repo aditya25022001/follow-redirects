@@ -268,9 +268,9 @@ describe("follow-redirects", function () {
 
     app.get("/a", function (req, res) {
       // Explictly send response with invalid Location header
-      res.socket.write("HTTP/1.1 301 Moved Permanently\n");
-      res.socket.write("Location: http://смольный-институт.рф\n");
-      res.socket.write("\n");
+      res.socket.write("HTTP/1.1 301 Moved Permanently\r\n");
+      res.socket.write("Location: http://смольный-институт.рф\r\n");
+      res.socket.write("\r\n");
       res.socket.end();
     });
 
@@ -289,9 +289,9 @@ describe("follow-redirects", function () {
 
   it("emits an error when the request fails for another reason", function () {
     app.get("/a", function (req, res) {
-      res.socket.write("HTTP/1.1 301 Moved Permanently\n");
-      res.socket.write("Location: other\n");
-      res.socket.write("\n");
+      res.socket.write("HTTP/1.1 301 Moved Permanently\r\n");
+      res.socket.write("Location: other\r\n");
+      res.socket.write("\r\n");
       res.socket.end();
     });
 
@@ -1208,6 +1208,29 @@ describe("follow-redirects", function () {
   });
 
   describe("when the client passes an Authorization header", function () {
+    const header = "Authorization";
+    const headerValue = "the header value";
+    it("ignores it when null", function () {
+      app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+      var opts = url.parse("http://127.0.0.1:3600/a");
+      opts.headers = { host: "localhost" };
+      opts.headers[header] = null;
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "localhost:3600");
+          assert.equal(body[header.toLowerCase()], undefined);
+        });
+    });
     it("keeps the header when redirected to the same host", function () {
       app.get("/a", redirectsTo(302, "/b"));
       app.get("/b", function (req, res) {
@@ -1215,9 +1238,8 @@ describe("follow-redirects", function () {
       });
 
       var opts = url.parse("http://localhost:3600/a");
-      opts.headers = {
-        authorization: "bearer my-token-1234",
-      };
+      opts.headers = {};
+      opts.headers[header] = headerValue;
 
       return server.start(app)
         .then(asPromise(function (resolve, reject) {
@@ -1229,7 +1251,7 @@ describe("follow-redirects", function () {
         .then(function (str) {
           var body = JSON.parse(str);
           assert.equal(body.host, "localhost:3600");
-          assert.equal(body.authorization, "bearer my-token-1234");
+          assert.equal(body[header.toLowerCase()], headerValue);
         });
     });
 
@@ -1240,10 +1262,8 @@ describe("follow-redirects", function () {
       });
 
       var opts = url.parse("http://127.0.0.1:3600/a");
-      opts.headers = {
-        host: "localhost",
-        authorization: "bearer my-token-1234",
-      };
+      opts.headers = { host: "localhost:3600" };
+      opts.headers[header] = headerValue;
 
       return server.start(app)
         .then(asPromise(function (resolve, reject) {
@@ -1255,7 +1275,7 @@ describe("follow-redirects", function () {
         .then(function (str) {
           var body = JSON.parse(str);
           assert.equal(body.host, "localhost:3600");
-          assert.equal(body.authorization, "bearer my-token-1234");
+          assert.equal(body[header.toLowerCase()], headerValue);
         });
     });
 
@@ -1266,9 +1286,8 @@ describe("follow-redirects", function () {
       });
 
       var opts = url.parse("http://localhost:3600/a");
-      opts.headers = {
-        authorization: "bearer my-token-1234",
-      };
+      opts.headers = {};
+      opts.headers[header] = headerValue;
 
       return server.start(app)
         .then(asPromise(function (resolve, reject) {
@@ -1280,7 +1299,7 @@ describe("follow-redirects", function () {
         .then(function (str) {
           var body = JSON.parse(str);
           assert.equal(body.host, "127.0.0.1:3600");
-          assert.equal(body.authorization, undefined);
+          assert.equal(body[header.toLowerCase()], undefined);
         });
     });
 
@@ -1291,10 +1310,8 @@ describe("follow-redirects", function () {
       });
 
       var opts = url.parse("http://127.0.0.1:3600/a");
-      opts.headers = {
-        host: "localhost",
-        authorization: "bearer my-token-1234",
-      };
+      opts.headers = { host: "localhost:3600" };
+      opts.headers[header] = headerValue;
 
       return server.start(app)
         .then(asPromise(function (resolve, reject) {
@@ -1306,7 +1323,127 @@ describe("follow-redirects", function () {
         .then(function (str) {
           var body = JSON.parse(str);
           assert.equal(body.host, "127.0.0.1:3600");
-          assert.equal(body.authorization, undefined);
+          assert.equal(body[header.toLowerCase()], undefined);
+        });
+    });
+  });
+
+  describe("when the client passes a Cookie header", function () {
+    const header = "Cookie";
+    const headerValue = "the header value";
+    it("ignores it when null", function () {
+      app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+      var opts = url.parse("http://127.0.0.1:3600/a");
+      opts.headers = { host: "localhost" };
+      opts.headers[header] = null;
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "localhost:3600");
+          assert.equal(body[header.toLowerCase()], undefined);
+        });
+    });
+    it("keeps the header when redirected to the same host", function () {
+      app.get("/a", redirectsTo(302, "/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+
+      var opts = url.parse("http://localhost:3600/a");
+      opts.headers = {};
+      opts.headers[header] = headerValue;
+
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "localhost:3600");
+          assert.equal(body[header.toLowerCase()], headerValue);
+        });
+    });
+
+    it("keeps the header when redirected to the same host via header", function () {
+      app.get("/a", redirectsTo(302, "http://localhost:3600/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+
+      var opts = url.parse("http://127.0.0.1:3600/a");
+      opts.headers = { host: "localhost:3600" };
+      opts.headers[header] = headerValue;
+
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "localhost:3600");
+          assert.equal(body[header.toLowerCase()], headerValue);
+        });
+    });
+
+    it("drops the header when redirected to a different host", function () {
+      app.get("/a", redirectsTo(302, "http://127.0.0.1:3600/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+
+      var opts = url.parse("http://localhost:3600/a");
+      opts.headers = {};
+      opts.headers[header] = headerValue;
+
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "127.0.0.1:3600");
+          assert.equal(body[header.toLowerCase()], undefined);
+        });
+    });
+
+    it("drops the header when redirected from a different host via header", function () {
+      app.get("/a", redirectsTo(302, "http://127.0.0.1:3600/b"));
+      app.get("/b", function (req, res) {
+        res.end(JSON.stringify(req.headers));
+      });
+
+      var opts = url.parse("http://127.0.0.1:3600/a");
+      opts.headers = { host: "localhost:3600" };
+      opts.headers[header] = headerValue;
+      return server.start(app)
+        .then(asPromise(function (resolve, reject) {
+          http.get(opts, resolve).on("error", reject);
+        }))
+        .then(asPromise(function (resolve, reject, res) {
+          res.pipe(concat({ encoding: "string" }, resolve)).on("error", reject);
+        }))
+        .then(function (str) {
+          var body = JSON.parse(str);
+          assert.equal(body.host, "127.0.0.1:3600");
+          assert.equal(body[header.toLowerCase()], undefined);
         });
     });
   });
